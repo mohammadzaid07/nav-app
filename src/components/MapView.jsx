@@ -1,48 +1,68 @@
 import "leaflet/dist/leaflet.css";
 import { useEffect, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  Polyline,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, GeoJSON } from "react-leaflet";
 import L from "leaflet";
+// We no longer need renderToStaticMarkup
 
+// User icon definition
 const userIcon = new L.Icon({
   iconUrl: "https://cdn-icons-png.flaticon.com/512/149/149059.png",
   iconSize: [35, 35],
 });
 
-const sourceIcon = new L.Icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-  iconSize: [30, 30],
-});
+// We no longer need the createWeatherIcon function
 
-const destIcon = new L.Icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-  iconSize: [30, 30],
-});
+function MapController({ route, position }) {
+  const map = useMap();
 
-export default function MapView({
-  onLocation,
-  routeCoords,
-  sourceCoords,
-  destCoords,
-}) {
-  const [position, setPosition] = useState([28.6139, 77.209]); // Default: Delhi
+  useEffect(() => {
+    if (route && route.features) {
+      try {
+        const bounds = L.geoJSON(route).getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [40, 40] });
+        }
+      } catch (err) {
+        console.error("Could not fit route bounds:", err);
+      }
+    }
+  }, [route, map]);
+
+  useEffect(() => {
+    if (position[0] !== 28.6139 && position[1] !== 77.209) {
+      map.flyTo(position, 15);
+    }
+  }, [position, map]);
+
+  return null;
+}
+
+function LocationFinder({ onLocation }) {
+  const map = useMap();
+  useEffect(() => {
+    map.locate();
+    map.on("locationfound", (e) => {
+      onLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
+    });
+    map.on("locationerror", (e) => {
+      console.error("Location access denied.", e.message);
+    });
+  }, [map, onLocation]);
+  return null;
+}
+
+// MapView no longer accepts 'weatherPoints'
+export default function MapView({ onLocation, route }) {
+  const [position, setPosition] = useState([28.6139, 77.209]);
 
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       alert("Geolocation not supported");
       return;
     }
-
     navigator.geolocation.getCurrentPosition(
       (loc) => {
-        const newPos = [loc.coords.latitude, loc.coords.longitude];
-        setPosition(newPos);
+        setPosition([loc.coords.latitude, loc.coords.longitude]);
       },
       () => alert("Unable to get location")
     );
@@ -51,85 +71,28 @@ export default function MapView({
   useEffect(() => {
     const btn = document.getElementById("locateMeBtn");
     if (btn) btn.addEventListener("click", getCurrentLocation);
+    return () => {
+      if (btn) btn.removeEventListener("click", getCurrentLocation);
+    };
   }, []);
 
-  function LocationFinder({ onLocation }) {
-    const map = useMap();
-
-    useEffect(() => {
-      map.locate();
-
-      map.on("locationfound", (e) => {
-        onLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
-      });
-
-      // 🔥 Important: Fix map rendering glitch on responsive layout
-      setTimeout(() => map.invalidateSize(), 300);
-    }, []);
-
-    return null;
-  }
-
-  // Recenter map automatically when source or destination changes
-  function AutoRecenter({ target }) {
-    const map = useMap();
-
-    useEffect(() => {
-      if (target) {
-        map.setView([target.lat, target.lon], 13);
-        setTimeout(() => map.invalidateSize(), 200);
-      }
-    }, [target]);
-
-    return null;
-  }
-
   return (
-    <div
-      className="
-        w-full
-        h-[50vh]    /* mobile */
-        sm:h-[60vh]
-        md:h-full   /* desktop */
-      "
-    >
+    <div className="w-full h-full">
       <MapContainer center={position} zoom={13} className="w-full h-full">
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-        <LocationFinder onLocation={onLocation} />
-
-        <AutoRecenter target={sourceCoords || destCoords} />
-
-        {/* USER LOCATION */}
         <Marker position={position} icon={userIcon}>
           <Popup>You are here</Popup>
         </Marker>
 
-        {/* SOURCE */}
-        {sourceCoords && (
-          <Marker
-            position={[sourceCoords.lat, sourceCoords.lon]}
-            icon={sourceIcon}
-          >
-            <Popup>Source</Popup>
-          </Marker>
-        )}
+        {/* This draws the blue route line */}
+        {route && <GeoJSON data={route} />}
 
-        {/* DESTINATION */}
-        {destCoords && (
-          <Marker position={[destCoords.lat, destCoords.lon]} icon={destIcon}>
-            <Popup>Destination</Popup>
-          </Marker>
-        )}
+        <MapController route={route} position={position} />
+        <LocationFinder onLocation={onLocation} />
 
-        {/* ROUTE LINE */}
-        {routeCoords?.length > 0 && (
-          <Polyline
-            positions={routeCoords.map((p) => [p.lat, p.lon])}
-            weight={6}
-            opacity={0.9}
-          />
-        )}
+        {/* All weather marker logic is GONE */}
+
       </MapContainer>
     </div>
   );
